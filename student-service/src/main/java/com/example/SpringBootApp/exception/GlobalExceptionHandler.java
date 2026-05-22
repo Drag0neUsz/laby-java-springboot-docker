@@ -9,43 +9,34 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(CourseNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(CourseNotFoundException ex) {
+    @ExceptionHandler(StudentNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(StudentNotFoundException ex) {
         ErrorResponse error = new ErrorResponse(
                 HttpStatus.NOT_FOUND.value(),
                 HttpStatus.NOT_FOUND.getReasonPhrase(),
-                // Jeśli ex.getMessage() byłby nullem, damy bezpieczny fallback
-                ex.getMessage() != null ? ex.getMessage() : "Nie odnaleziono zasobu"
+                ex.getMessage() != null ? ex.getMessage() : "Student o podanym ID nie został odnaleziony."
         );
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
 
-    @ExceptionHandler(CourseHasGradesException.class)
-    public ResponseEntity<ErrorResponse> handleConflict(CourseHasGradesException ex) {
-        ErrorResponse error = new ErrorResponse(
-                HttpStatus.CONFLICT.value(),
-                HttpStatus.CONFLICT.getReasonPhrase(),
-                ex.getMessage() != null ? ex.getMessage() : "Konflikt danych - istnieją powiązane oceny"
-        );
-        return new ResponseEntity<>(error, HttpStatus.CONFLICT);
-    }
-
-    @ExceptionHandler({InvalidNameException.class, CourseInvalidEctsException.class})
-    public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex) {
+    // 400 - Zły wiek (np. ujemny) lub puste/błędne imię studenta
+    @ExceptionHandler({StudentInvalidAgeException.class, InvalidNameException.class})
+    public ResponseEntity<ErrorResponse> handleBadRequest(RuntimeException ex) {
         ErrorResponse error = new ErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
-                ex.getMessage() != null ? ex.getMessage() : "Niepoprawne dane kursu (zła nazwa lub punkty ECTS)"
+                ex.getMessage() != null ? ex.getMessage() : "Niepoprawne dane studenta (błędne imię lub wiek)."
         );
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
+    // 500 - Gdy wywali się coś niespodziewanego (np. problem z restTemplate przy usuwaniu ocen studenta)
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ErrorResponse> handleRuntimeException(RuntimeException ex) {
         ErrorResponse error = new ErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
-                ex.getMessage()
+                ex.getMessage() != null ? ex.getMessage() : "Wystąpił wewnętrzny błąd serwera."
         );
         return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }

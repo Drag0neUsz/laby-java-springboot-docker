@@ -3,10 +3,8 @@ package com.example.SpringBootApp.service;
 import com.example.SpringBootApp.exception.CourseNotFoundException;
 import com.example.SpringBootApp.exception.GradeInvalidGradeException;
 import com.example.SpringBootApp.exception.GradeNotFoundException;
-
 import com.example.SpringBootApp.exception.StudentNotFoundException;
 import com.example.SpringBootApp.model.Grade;
-
 import com.example.SpringBootApp.repository.GradeRepository;
 
 import org.springframework.stereotype.Service;
@@ -18,18 +16,20 @@ import java.util.List;
 
 @Service
 public class GradeServiceImpl implements GradeService {
-    private final List<Double> allowedGrades = Arrays.asList(2.0, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5);
-    private void validateGradeValue(Double value) {
-        if (value == null || !allowedGrades.contains(value)) {
-            throw new GradeInvalidGradeException();
-        }
-    }
 
+    private final List<Double> allowedGrades = Arrays.asList(2.0, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5);
     private final GradeRepository gradeRepository;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     public GradeServiceImpl(GradeRepository gradeRepository) {
         this.gradeRepository = gradeRepository;
+    }
+
+    private void validateGradeValue(Double value) {
+        if (value == null || !allowedGrades.contains(value)) {
+            throw new GradeInvalidGradeException();
+        }
     }
 
     @Override
@@ -52,7 +52,7 @@ public class GradeServiceImpl implements GradeService {
         } catch (HttpStatusCodeException e) {
             throw new StudentNotFoundException();
         }
-        
+
         try {
             restTemplate.getForObject("http://localhost:8082/courses/" + grade.getCourseId(), Object.class);
         } catch (HttpStatusCodeException e) {
@@ -82,8 +82,6 @@ public class GradeServiceImpl implements GradeService {
         return true;
     }
 
-
-
     @Override
     public List<Grade> findByStudentId(Integer studentId) {
         return gradeRepository.findByStudentId(studentId);
@@ -104,5 +102,8 @@ public class GradeServiceImpl implements GradeService {
         return gradeRepository.existsByCourseId(courseId);
     }
 
-    public void deleteByStudentId(Integer studentId) {gradeRepository.deleteByStudentId(studentId);}
+    @Override
+    public void deleteByStudentId(Integer studentId) {
+        gradeRepository.deleteByStudentId(studentId);
+    }
 }

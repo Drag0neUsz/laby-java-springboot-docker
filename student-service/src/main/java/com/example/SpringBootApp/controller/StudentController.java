@@ -5,9 +5,13 @@ import com.example.SpringBootApp.exception.InvalidNameException;
 import com.example.SpringBootApp.model.Student;
 import com.example.SpringBootApp.service.StudentService;
 import com.example.SpringBootApp.exception.StudentNotFoundException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/students")
@@ -30,18 +34,21 @@ public class StudentController {
     }
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED) // Status 201 przy udanym dodaniu studenta
     public Student add(@RequestBody Student student) throws StudentInvalidAgeException, InvalidNameException {
         return service.addStudent(student);
     }
 
     @DeleteMapping("/{id}")
-    public boolean delete(@PathVariable int id) throws StudentNotFoundException {
-        return service.deleteStudent(id);
+    public ResponseEntity<Map<String, Boolean>> delete(@PathVariable int id) throws StudentNotFoundException {
+        service.deleteStudent(id);
+        return ResponseEntity.ok(Collections.singletonMap("deleted", true));
     }
 
     @GetMapping("/count")
-    public int count() {
-        return service.countStudents();
+    public Map<String, Integer> count() {
+        int studentCount = service.countStudents();
+        return Collections.singletonMap("count", studentCount);
     }
 
     @PutMapping("/{id}")

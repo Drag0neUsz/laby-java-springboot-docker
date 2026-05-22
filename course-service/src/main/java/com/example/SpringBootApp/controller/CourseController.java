@@ -7,7 +7,9 @@ import com.example.SpringBootApp.model.Course;
 import com.example.SpringBootApp.service.CourseService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/courses")
@@ -40,8 +42,9 @@ public class CourseController {
     }
 
     @DeleteMapping("/{id}")
-    public boolean delete(@PathVariable Integer id) {
-        return courseService.deleteCourse(id);
+    public Map<String, Boolean> delete(@PathVariable Integer id) {
+        courseService.deleteCourse(id);
+        return Collections.singletonMap("success", true);
     }
 
     @GetMapping("/ects/{ects}")

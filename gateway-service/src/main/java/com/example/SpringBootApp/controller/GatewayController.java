@@ -4,7 +4,10 @@ import com.example.SpringBootApp.model.dto.GradeDetailsDTO;
 import com.example.SpringBootApp.model.dto.StudentDTO;
 import com.example.SpringBootApp.service.GatewayService;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/gateway")
@@ -17,8 +20,9 @@ public class GatewayController {
     }
 
     @GetMapping("/students/{id}/gpa")
-    public Double getAverage(@PathVariable Integer id) {
-        return gatewayService.getStudentWeightedAverage(id);
+    public Map<String, Double> getAverage(@PathVariable Integer id) {
+        Double gpa = gatewayService.getStudentWeightedAverage(id);
+        return Collections.singletonMap("gpa", gpa);
     }
 
     @GetMapping("/students/{id}/grades")
@@ -27,21 +31,25 @@ public class GatewayController {
     }
 
     @GetMapping("/courses/{id}/failed")
-    public Long getFailedCount(@PathVariable Integer id) {
-        return gatewayService.countFailedStudents(id);
+    public Map<String, Long> getFailedCount(@PathVariable Integer id) {
+        Long count = gatewayService.countFailedStudents(id);
+        return Collections.singletonMap("failedCount", count);
     }
 
     @GetMapping("/students/top")
     public List<StudentDTO> getTopStudents() {
         return gatewayService.getTopStudents();
     }
+
     @GetMapping("/students/{id}/graded-courses")
-    public List<String> getStudentCourseNames(@PathVariable Integer id) {
-        return gatewayService.getStudentCourseNames(id);
+    public Map<String, List<String>> getStudentCourseNames(@PathVariable Integer id) {
+        List<String> courseNames = gatewayService.getStudentCourseNames(id);
+        return Collections.singletonMap("courses", courseNames);
     }
 
     @GetMapping("/courses/{id}/graded-students")
-    public List<String> getCourseStudents(@PathVariable Integer id) {
-        return gatewayService.getCourseStudents(id);
+    public Map<String, List<String>> getCourseStudents(@PathVariable Integer id) {
+        List<String> studentNames = gatewayService.getCourseStudents(id);
+        return Collections.singletonMap("students", studentNames);
     }
 }

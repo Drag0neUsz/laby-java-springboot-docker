@@ -9,7 +9,11 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler({StudentNotFoundException.class, CourseNotFoundException.class, GradeNotFoundException.class})
+    @ExceptionHandler({
+            StudentNotFoundException.class,
+            CourseNotFoundException.class,
+            GradeNotFoundException.class
+    })
     public ResponseEntity<ErrorResponse> handleNotFound(RuntimeException ex) {
         ErrorResponse error = new ErrorResponse(
                 HttpStatus.NOT_FOUND.value(),
@@ -20,7 +24,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(GradeInvalidGradeException.class)
-    public ResponseEntity<ErrorResponse> handleBadRequest(RuntimeException ex) {
+    public ResponseEntity<ErrorResponse> handleBadRequest(GradeInvalidGradeException ex) {
         ErrorResponse error = new ErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
