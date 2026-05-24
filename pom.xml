@@ -21,6 +21,7 @@
 		<module>course-service</module>
 		<module>grade-service</module>
 		<module>gateway-service</module>
+		<module>thick-client</module>
 	</modules>
 
 	<properties>
