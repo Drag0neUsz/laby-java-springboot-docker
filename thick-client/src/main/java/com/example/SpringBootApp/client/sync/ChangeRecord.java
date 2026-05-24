@@ -23,6 +23,7 @@ public class ChangeRecord {
     private ActionType actionType;
     private Integer entityId;
     private Object payload;
+    private BusinessRule businessRule = BusinessRule.NONE;
     private final LocalDateTime createdAt;
 
     public ChangeRecord(EntityType entityType, ActionType actionType, Integer entityId, Object payload) {
@@ -42,11 +43,16 @@ public class ChangeRecord {
     public void setEntityId(Integer entityId) { this.entityId = entityId; }
     public Object getPayload() { return payload; }
     public void setPayload(Object payload) { this.payload = payload; }
+    public BusinessRule getBusinessRule() { return businessRule; }
+    public void setBusinessRule(BusinessRule businessRule) {
+        this.businessRule = (businessRule == null) ? BusinessRule.NONE : businessRule;
+    }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     @Override
     public String toString() {
         return "#" + sequence + " " + actionType + " " + entityType + "(id=" + entityId + ")"
+                + (businessRule != BusinessRule.NONE ? " {rule=" + businessRule + "}" : "")
                 + (payload != null ? " payload=" + payload : "");
     }
 }

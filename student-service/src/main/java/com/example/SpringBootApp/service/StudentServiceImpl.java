@@ -35,6 +35,10 @@ public class StudentServiceImpl implements StudentService {
         if (student.getAge() <= 0 || student.getAge() > 123) throw new StudentInvalidAgeException();
         if (student.getFirstName() == null || student.getFirstName().trim().isEmpty()) throw new InvalidNameException();
 
+        if (student.getGrant() == null || student.getGrant().trim().isEmpty()) {
+            student.setGrant(Student.GRANT_NOT_QUALIFIED);
+        }
+
         return studentRepository.save(student);
     }
 
@@ -69,6 +73,9 @@ public class StudentServiceImpl implements StudentService {
         student.setFirstName(studentDetails.getFirstName());
         student.setAge(studentDetails.getAge());
         student.setCity(studentDetails.getCity());
+        if (studentDetails.getGrant() != null && !studentDetails.getGrant().trim().isEmpty()) {
+            student.setGrant(studentDetails.getGrant());
+        }
 
         return studentRepository.save(student);
     }

@@ -6,6 +6,12 @@ import java.util.List;
 
 @Entity
 public class Student {
+
+    /** Grant qualification status values. */
+    public static final String GRANT_NOT_QUALIFIED = "NOT_QUALIFIED";
+    public static final String GRANT_QUALIFIED     = "QUALIFIED";
+    public static final String GRANT_GRANTED       = "GRANTED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
@@ -13,6 +19,13 @@ public class Student {
     private String firstName;
     private int age;
     private String city;
+
+    /**
+     * Scholarship grant lifecycle: NOT_QUALIFIED -> QUALIFIED -> GRANTED.
+     * Defaults to NOT_QUALIFIED for every newly persisted student.
+     */
+    @Column(nullable = false)
+    private String grant = GRANT_NOT_QUALIFIED;
 
 
     public Student() {
@@ -41,5 +54,11 @@ public class Student {
     }
     public void setCity(String city) {
         this.city = city;
+    }
+    public String getGrant() {
+        return grant;
+    }
+    public void setGrant(String grant) {
+        this.grant = grant;
     }
 }

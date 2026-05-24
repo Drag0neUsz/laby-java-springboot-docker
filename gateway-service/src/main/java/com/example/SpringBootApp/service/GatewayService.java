@@ -5,10 +5,14 @@ import com.example.SpringBootApp.model.dto.CourseDTO;
 import com.example.SpringBootApp.model.dto.GradeDTO;
 import com.example.SpringBootApp.model.dto.GradeDetailsDTO;
 import com.example.SpringBootApp.model.dto.StudentDTO;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -144,6 +148,134 @@ public class GatewayService {
                     }
                 })
                 .toList();
+    }
+
+    /* =====================================================================
+       State-changing batch operations.
+
+       These two operations mutate the data on the student-service. They are
+       implemented at the gateway level because they need to cross-reference
+       Student / Grade / Course (single-service endpoints alone cannot tell
+       which students must be deleted/promoted).
+       ===================================================================== */
+
+    /** Failing grade in the Polish grading scale. */
+    private static final double FAIL_GRADE = 2.0;
+    /** A student is purged once their failed ECTS reach this threshold. */
+    private static final int FAIL_ECTS_THRESHOLD = 10;
+    /** GPA threshold above which a student becomes qualified for the grant. */
+    private static final double QUALIFICATION_GPA = 4.75;
+
+    /**
+     * Delete every student whose 2.0 ("failed") grades sum to at least
+     * {@value #FAIL_ECTS_THRESHOLD} ECTS (each course counted once per failure).
+     *
+     * @return ids of the students that were actually deleted, in order.
+     */
+    public List<Integer> purgeStudentsWithFailedEcts() {
+        StudentDTO[] allStudents;
+        try {
+            allStudents = restTemplate.getForObject("http://localhost:8081/students", StudentDTO[].class);
+        } catch (HttpStatusCodeException e) {
+            throw new EmptyResultException("Cannot access student list. Service returned status: " + e.getStatusCode());
+        }
+        if (allStudents == null || allStudents.length == 0) {
+            return List.of();
+        }
+
+        Map<Integer, Integer> ectsCache = new HashMap<>();
+        List<Integer> deleted = new ArrayList<>();
+
+        for (StudentDTO student : allStudents) {
+            int failedEcts = sumFailedEcts(student.getId(), ectsCache);
+            if (failedEcts >= FAIL_ECTS_THRESHOLD) {
+                try {
+                    restTemplate.delete(STUDENT_URL + student.getId());
+                    deleted.add(student.getId());
+                } catch (Exception ignored) {
+                    // Skip students that could not be deleted (already gone, etc.).
+                }
+            }
+        }
+        return deleted;
+    }
+
+    /**
+     * For every student currently marked {@code NOT_QUALIFIED} whose
+     * ECTS-weighted GPA is &gt;= {@value #QUALIFICATION_GPA}, promote them
+     * to {@code QUALIFIED}.
+     *
+     * @return ids of the students that were actually promoted, in order.
+     */
+    public List<Integer> promoteQualifiedStudents() {
+        StudentDTO[] allStudents;
+        try {
+            allStudents = restTemplate.getForObject("http://localhost:8081/students", StudentDTO[].class);
+        } catch (HttpStatusCodeException e) {
+            throw new EmptyResultException("Cannot access student list. Service returned status: " + e.getStatusCode());
+        }
+        if (allStudents == null || allStudents.length == 0) {
+            return List.of();
+        }
+
+        List<Integer> promoted = new ArrayList<>();
+        for (StudentDTO student : allStudents) {
+            String current = student.getGrant();
+            // Only promote students that are currently NOT_QUALIFIED.
+            if (current != null && !"NOT_QUALIFIED".equalsIgnoreCase(current)) continue;
+
+            Double gpa;
+            try {
+                gpa = getStudentWeightedAverage(student.getId());
+            } catch (Exception ignored) {
+                continue;
+            }
+            if (gpa == null || gpa < QUALIFICATION_GPA) continue;
+
+            student.setGrant("QUALIFIED");
+            try {
+                restTemplate.exchange(
+                        STUDENT_URL + student.getId(),
+                        HttpMethod.PUT,
+                        new HttpEntity<>(student),
+                        StudentDTO.class);
+                promoted.add(student.getId());
+            } catch (Exception ignored) {
+                // Skip students whose update fails (deleted concurrently, etc.).
+            }
+        }
+        return promoted;
+    }
+
+    /** ECTS sum of all failed (2.0) grades for a single student. */
+    private int sumFailedEcts(Integer studentId, Map<Integer, Integer> ectsCache) {
+        GradeDTO[] grades;
+        try {
+            grades = restTemplate.getForObject(GRADE_URL + "student/" + studentId, GradeDTO[].class);
+        } catch (Exception e) {
+            return 0;
+        }
+        if (grades == null || grades.length == 0) return 0;
+
+        int total = 0;
+        for (GradeDTO g : grades) {
+            if (g.getGrade() == null || g.getGrade() != FAIL_GRADE) continue;
+            Integer courseId = g.getCourseId();
+            if (courseId == null) continue;
+
+            Integer ects = ectsCache.get(courseId);
+            if (ects == null) {
+                try {
+                    CourseDTO course = restTemplate.getForObject(COURSE_URL + courseId, CourseDTO.class);
+                    ects = (course == null || course.getEcts() == null) ? 0 : course.getEcts();
+                } catch (Exception e) {
+                    ects = 0;
+                }
+                ectsCache.put(courseId, ects);
+            }
+            total += ects;
+        }
+        return total;
     }
 
     public List<String> getCourseStudents(Integer courseId) {

@@ -108,4 +108,18 @@ public class RemoteFetchService {
             throw e;
         }
     }
+
+    /**
+     * All grades currently registered for the given student id, freshly fetched
+     * from the grade-service. Returns an empty list if the student has no
+     * grades or the call fails - never null.
+     */
+    public List<GradeDTO> fetchGradesForStudent(Integer studentId) {
+        try {
+            GradeDTO[] arr = restTemplate.getForObject(gradeUrl + "/student/" + studentId, GradeDTO[].class);
+            return arr == null ? Collections.emptyList() : Arrays.asList(arr);
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
 }

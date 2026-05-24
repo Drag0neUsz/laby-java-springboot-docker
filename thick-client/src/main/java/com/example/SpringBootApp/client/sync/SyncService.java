@@ -153,6 +153,10 @@ public class SyncService {
                     reportDeletionConflict(r, local);
                     return true;
                 }
+                if (r.getBusinessRule() == BusinessRule.PROMOTE_TO_QUALIFIED
+                        && !revalidatePromoteToQualified(r, local, serverNow)) {
+                    return true;
+                }
                 StudentDTO snapshot = store.studentSnapshot(local.getId()).orElse(null);
                 if (snapshot != null && !snapshot.fieldsEqual(serverNow)) {
                     if (!askOverwrite("Student", local.getId(), snapshot, serverNow, local, userInput)) {
@@ -181,6 +185,10 @@ public class SyncService {
                 return true;
             }
             case DELETE -> {
+                if (r.getBusinessRule() == BusinessRule.PURGE_FAILED_ECTS
+                        && !revalidatePurgeFailedEcts(r)) {
+                    return true;
+                }
                 try {
                     System.out.println("[SYNC] DELETE " + url + "/" + r.getEntityId());
                     restTemplate.delete(url + "/" + r.getEntityId());
@@ -197,6 +205,116 @@ public class SyncService {
             }
         }
         return true;
+    }
+
+    /* =====================================================================
+       Business-rule revalidation against fresh server data.
+
+       These guards run JUST before the actual mutation so that an offline
+       decision is not blindly applied if the world changed since the rule
+       was evaluated locally. They mirror the thresholds used by
+       OfflineBusinessLogic / GatewayService.
+       ===================================================================== */
+
+    private static final double FAIL_GRADE = 2.0;
+    private static final int FAIL_ECTS_THRESHOLD = 10;
+    private static final double QUALIFICATION_GPA = 4.75;
+
+    /**
+     * Re-checks that the targeted student STILL has at least 10 ECTS of failed
+     * grades on the server. If the threshold no longer holds, reports a
+     * BUSINESS_RULE_VIOLATED conflict and tells the caller to skip the DELETE.
+     *
+     * @return true if it's safe to proceed with the delete, false otherwise.
+     */
+    private boolean revalidatePurgeFailedEcts(ChangeRecord r) {
+        Integer studentId = r.getEntityId();
+        if (remote.fetchStudent(studentId) == null) {
+            // Already gone server-side - let the normal DELETE path handle the 404.
+            return true;
+        }
+        int failed = sumFailedEctsOnServer(studentId);
+        System.out.println("[SYNC][RULE] PURGE_FAILED_ECTS revalidation: Student #" + studentId
+                + " currently has " + failed + " failed ECTS on the server.");
+        if (failed >= FAIL_ECTS_THRESHOLD) {
+            return true;
+        }
+        reportBusinessConflict(r, null,
+                "Purge no longer applies: Student #" + studentId + " now has only "
+                        + failed + " failed ECTS on the server (< " + FAIL_ECTS_THRESHOLD
+                        + "). DELETE aborted.");
+        return false;
+    }
+
+    /**
+     * Re-checks that promoting the targeted student to QUALIFIED is still
+     * warranted on the server:
+     *   - the server-side grant must still be NOT_QUALIFIED (i.e. no one else
+     *     already qualified or granted them), AND
+     *   - their server-side weighted GPA must still be &gt;= 4.75.
+     * Reports a BUSINESS_RULE_VIOLATED conflict if either check fails.
+     *
+     * @return true if it's safe to proceed with the PUT, false otherwise.
+     */
+    private boolean revalidatePromoteToQualified(ChangeRecord r, StudentDTO local, StudentDTO serverNow) {
+        Integer studentId = local.getId();
+        String serverGrant = serverNow.getGrant();
+        if (serverGrant != null && !StudentDTO.GRANT_NOT_QUALIFIED.equalsIgnoreCase(serverGrant)) {
+            reportBusinessConflict(r, local,
+                    "Promotion no longer applies: Student #" + studentId
+                            + " is already '" + serverGrant + "' on the server. PUT aborted.");
+            return false;
+        }
+        Double gpa = recomputeGpaFromServer(studentId);
+        System.out.println("[SYNC][RULE] PROMOTE_TO_QUALIFIED revalidation: Student #" + studentId
+                + " has server-side GPA = " + (gpa == null ? "n/a" : String.format("%.3f", gpa)) + ".");
+        if (gpa == null || gpa < QUALIFICATION_GPA) {
+            reportBusinessConflict(r, local,
+                    "Promotion no longer applies: Student #" + studentId
+                            + " has server-side GPA = " + (gpa == null ? "n/a" : String.format("%.3f", gpa))
+                            + " (< " + QUALIFICATION_GPA + "). PUT aborted.");
+            return false;
+        }
+        return true;
+    }
+
+    /** Sum of ECTS over all server-side 2.0 grades for the given student. */
+    private int sumFailedEctsOnServer(Integer studentId) {
+        List<GradeDTO> grades = remote.fetchGradesForStudent(studentId);
+        if (grades.isEmpty()) return 0;
+        int total = 0;
+        Map<Integer, Integer> ectsCache = new HashMap<>();
+        for (GradeDTO g : grades) {
+            if (g.getGrade() == null || g.getGrade() != FAIL_GRADE) continue;
+            Integer courseId = g.getCourseId();
+            if (courseId == null) continue;
+            Integer ects = ectsCache.computeIfAbsent(courseId, cid -> {
+                CourseDTO c = remote.fetchCourse(cid);
+                return (c == null || c.getEcts() == null) ? 0 : c.getEcts();
+            });
+            total += ects;
+        }
+        return total;
+    }
+
+    /** ECTS-weighted GPA recomputed strictly from fresh server data. */
+    private Double recomputeGpaFromServer(Integer studentId) {
+        List<GradeDTO> grades = remote.fetchGradesForStudent(studentId);
+        if (grades.isEmpty()) return null;
+        double weighted = 0.0;
+        int totalEcts = 0;
+        Map<Integer, Integer> ectsCache = new HashMap<>();
+        for (GradeDTO g : grades) {
+            if (g.getGrade() == null || g.getCourseId() == null) continue;
+            Integer ects = ectsCache.computeIfAbsent(g.getCourseId(), cid -> {
+                CourseDTO c = remote.fetchCourse(cid);
+                return (c == null || c.getEcts() == null) ? 0 : c.getEcts();
+            });
+            if (ects == 0) continue;
+            weighted += g.getGrade() * ects;
+            totalEcts += ects;
+        }
+        return totalEcts == 0 ? null : weighted / totalEcts;
     }
 
     private boolean syncCourse(ChangeRecord r, Scanner userInput, Map<Integer, Integer> idMap) {

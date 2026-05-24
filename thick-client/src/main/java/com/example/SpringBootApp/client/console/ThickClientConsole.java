@@ -8,6 +8,7 @@ import com.example.SpringBootApp.client.service.RemoteFetchService;
 import com.example.SpringBootApp.client.store.LocalDataStore;
 import com.example.SpringBootApp.client.sync.ActionQueue;
 import com.example.SpringBootApp.client.sync.ActionType;
+import com.example.SpringBootApp.client.sync.BusinessRule;
 import com.example.SpringBootApp.client.sync.ChangeRecord;
 import com.example.SpringBootApp.client.sync.EntityType;
 import com.example.SpringBootApp.client.sync.PendingConflict;
@@ -168,6 +169,8 @@ public class ThickClientConsole implements CommandLineRunner {
             System.out.println("11) [BIZ] Top students by weighted GPA (offline)");
             System.out.println("12) [BIZ] Count failed grades for a course (offline)");
             System.out.println("13) [BIZ] List courses attended by student (offline)");
+            System.out.println("14) [BIZ] Purge students with >=10 failed ECTS (offline)");
+            System.out.println("15) [BIZ] Promote NOT_QUALIFIED students with GPA >= 4.75 (offline)");
             System.out.println(" 0) Back");
             System.out.println("------------------------------------------------");
             System.out.print("Choose: ");
@@ -186,6 +189,8 @@ public class ThickClientConsole implements CommandLineRunner {
                 case "11" -> topStudents(s);
                 case "12" -> failedCount(s);
                 case "13" -> coursesAttended(s);
+                case "14" -> purgeFailedStudents(s);
+                case "15" -> promoteQualifiedStudents(s);
                 case "0" -> { return; }
                 default -> System.out.println("Unknown option.");
             }
@@ -220,7 +225,7 @@ public class ThickClientConsole implements CommandLineRunner {
         String city = s.nextLine().trim();
 
         int tempId = store.nextTempId();
-        StudentDTO local = new StudentDTO(tempId, firstName, age, city);
+        StudentDTO local = new StudentDTO(tempId, firstName, age, city, StudentDTO.GRANT_NOT_QUALIFIED);
         store.putStudent(local);
         queue.record(new ChangeRecord(EntityType.STUDENT, ActionType.CREATE, tempId, local.copy()));
         System.out.println("[LOCAL] Student created with TEMP id=" + tempId + " -> " + local);
@@ -240,6 +245,9 @@ public class ThickClientConsole implements CommandLineRunner {
         String ageStr = s.nextLine().trim();
         System.out.print("New city       [" + existing.getCity() + "]: ");
         String city = s.nextLine().trim();
+        System.out.print("New grant      [" + existing.getGrant()
+                + "] (NOT_QUALIFIED / QUALIFIED / GRANTED, blank to keep): ");
+        String grant = s.nextLine().trim();
 
         Integer newAge = null;
         if (!ageStr.isEmpty()) {
@@ -254,13 +262,26 @@ public class ThickClientConsole implements CommandLineRunner {
                 return;
             }
         }
+        if (!grant.isEmpty() && !isValidGrant(grant)) {
+            System.out.println("[LOCAL][ERROR] Grant must be NOT_QUALIFIED, QUALIFIED or GRANTED (got '" + grant + "').");
+            return;
+        }
 
         if (!fn.isEmpty()) existing.setFirstName(fn);
         if (newAge != null) existing.setAge(newAge);
         if (!city.isEmpty()) existing.setCity(city);
+        if (!grant.isEmpty()) existing.setGrant(grant.toUpperCase());
 
         queue.record(new ChangeRecord(EntityType.STUDENT, ActionType.UPDATE, id, existing.copy()));
         System.out.println("[LOCAL] Student updated -> " + existing);
+    }
+
+    private static boolean isValidGrant(String value) {
+        if (value == null) return false;
+        String v = value.trim().toUpperCase();
+        return v.equals(StudentDTO.GRANT_NOT_QUALIFIED)
+                || v.equals(StudentDTO.GRANT_QUALIFIED)
+                || v.equals(StudentDTO.GRANT_GRANTED);
     }
 
     private void deleteStudent(Scanner s) {
@@ -453,6 +474,77 @@ public class ThickClientConsole implements CommandLineRunner {
         }
         System.out.println("[BIZ] Courses attended by student " + id + " (offline):");
         names.forEach(n -> System.out.println("  - " + n));
+    }
+
+    /**
+     * Locally delete every student whose 2.0 grades sum to >= 10 ECTS and
+     * push a DELETE entry per student onto the sync queue. Asks for
+     * confirmation before mutating local state.
+     */
+    private void purgeFailedStudents(Scanner s) {
+        List<Map.Entry<StudentDTO, Integer>> candidates = businessLogic.studentsToPurgeForFailedEcts();
+        if (candidates.isEmpty()) {
+            System.out.println("[BIZ] No students reach the "
+                    + OfflineBusinessLogic.FAIL_ECTS_THRESHOLD + "-ECTS failure threshold in the local store.");
+            return;
+        }
+        System.out.println("[BIZ] Students that would be PURGED (>= "
+                + OfflineBusinessLogic.FAIL_ECTS_THRESHOLD + " failed ECTS, offline view):");
+        for (Map.Entry<StudentDTO, Integer> e : candidates) {
+            System.out.printf("  failedEcts=%d  -  %s%n", e.getValue(), e.getKey());
+        }
+        System.out.print("Apply purge locally and queue DELETE for each? (Y/N): ");
+        String answer = s.nextLine().trim();
+        if (!answer.equalsIgnoreCase("Y") && !answer.equalsIgnoreCase("YES")) {
+            System.out.println("[BIZ] Purge cancelled.");
+            return;
+        }
+        int deleted = 0;
+        for (Map.Entry<StudentDTO, Integer> e : candidates) {
+            Integer sid = e.getKey().getId();
+            store.removeStudent(sid);
+            ChangeRecord cr = new ChangeRecord(EntityType.STUDENT, ActionType.DELETE, sid, null);
+            cr.setBusinessRule(BusinessRule.PURGE_FAILED_ECTS);
+            queue.record(cr);
+            deleted++;
+        }
+        System.out.println("[LOCAL] Purged " + deleted + " student(s); each DELETE queued for next sync"
+                + " (will be revalidated against the server before being applied).");
+    }
+
+    /**
+     * Locally promote every NOT_QUALIFIED student with weighted GPA >= 4.75
+     * to QUALIFIED and queue an UPDATE per student. Asks for confirmation
+     * before mutating local state.
+     */
+    private void promoteQualifiedStudents(Scanner s) {
+        List<Map.Entry<StudentDTO, Double>> candidates = businessLogic.studentsToPromoteToQualified();
+        if (candidates.isEmpty()) {
+            System.out.println("[BIZ] No NOT_QUALIFIED students reach the GPA threshold of "
+                    + OfflineBusinessLogic.QUALIFICATION_GPA + " in the local store.");
+            return;
+        }
+        System.out.println("[BIZ] Students that would be PROMOTED to QUALIFIED (offline view):");
+        for (Map.Entry<StudentDTO, Double> e : candidates) {
+            System.out.printf("  gpa=%.3f  -  %s%n", e.getValue(), e.getKey());
+        }
+        System.out.print("Apply promotion locally and queue UPDATE for each? (Y/N): ");
+        String answer = s.nextLine().trim();
+        if (!answer.equalsIgnoreCase("Y") && !answer.equalsIgnoreCase("YES")) {
+            System.out.println("[BIZ] Promotion cancelled.");
+            return;
+        }
+        int promoted = 0;
+        for (Map.Entry<StudentDTO, Double> e : candidates) {
+            StudentDTO stud = e.getKey();
+            stud.setGrant(StudentDTO.GRANT_QUALIFIED);
+            ChangeRecord cr = new ChangeRecord(EntityType.STUDENT, ActionType.UPDATE, stud.getId(), stud.copy());
+            cr.setBusinessRule(BusinessRule.PROMOTE_TO_QUALIFIED);
+            queue.record(cr);
+            promoted++;
+        }
+        System.out.println("[LOCAL] Promoted " + promoted + " student(s); each UPDATE queued for next sync"
+                + " (will be revalidated against the server before being applied).");
     }
 
     /* ============================================================

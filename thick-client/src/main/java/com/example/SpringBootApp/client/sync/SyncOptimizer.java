@@ -53,6 +53,7 @@ public class SyncOptimizer {
                 System.out.println("[OPTIMIZER] CREATE + UPDATE on " + next.getEntityType()
                         + "(id=" + next.getEntityId() + ") -> merged into single POST");
                 existing.setPayload(next.getPayload());
+                existing.setBusinessRule(next.getBusinessRule());
             } else if (prev == ActionType.CREATE && cur == ActionType.DELETE) {
                 System.out.println("[OPTIMIZER] CREATE + DELETE on " + next.getEntityType()
                         + "(id=" + next.getEntityId() + ") -> cancelled out (nothing to send)");
@@ -61,11 +62,13 @@ public class SyncOptimizer {
                 System.out.println("[OPTIMIZER] UPDATE + UPDATE on " + next.getEntityType()
                         + "(id=" + next.getEntityId() + ") -> merged into single PUT");
                 existing.setPayload(next.getPayload());
+                existing.setBusinessRule(next.getBusinessRule());
             } else if (prev == ActionType.UPDATE && cur == ActionType.DELETE) {
                 System.out.println("[OPTIMIZER] UPDATE + DELETE on " + next.getEntityType()
                         + "(id=" + next.getEntityId() + ") -> collapsed to single DELETE");
                 existing.setActionType(ActionType.DELETE);
                 existing.setPayload(null);
+                existing.setBusinessRule(next.getBusinessRule());
             } else if (prev == ActionType.DELETE) {
                 System.out.println("[OPTIMIZER] " + cur + " after DELETE on " + next.getEntityType()
                         + "(id=" + next.getEntityId() + ") -> ignored (entity already scheduled for deletion)");
@@ -97,6 +100,7 @@ public class SyncOptimizer {
 
     private static ChangeRecord copyOf(ChangeRecord src) {
         ChangeRecord r = new ChangeRecord(src.getEntityType(), src.getActionType(), src.getEntityId(), src.getPayload());
+        r.setBusinessRule(src.getBusinessRule());
         return r;
     }
 }
