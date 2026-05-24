@@ -1,6 +1,6 @@
 # SpringBootApp
 
-A simple Spring Boot REST API for managing students, courses, and grades using Spring Web MVC, Spring Data JPA, and an in-memory H2 database.
+A simple Spring Boot REST API with a THICC client for managing students, courses, and grades using Spring Web MVC, Spring Data JPA, and an in-memory H2 database.
 
 ## Setup
 
