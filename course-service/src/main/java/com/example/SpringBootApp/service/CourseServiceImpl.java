@@ -4,16 +4,20 @@ import com.example.SpringBootApp.exception.*;
 import com.example.SpringBootApp.model.Course;
 import com.example.SpringBootApp.repository.CourseRepository;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class CourseServiceImpl implements CourseService {
 
     private final CourseRepository courseRepository;
 
+    @Value("${grades.service.url}")
+    private String gradesServiceUrl;
 
     public CourseServiceImpl(CourseRepository courseRepository) {
         this.courseRepository = courseRepository;
@@ -64,8 +68,13 @@ public class CourseServiceImpl implements CourseService {
         if (!courseRepository.existsById(id)) {
             throw new CourseNotFoundException();
         }
+
+        String url = gradesServiceUrl + "/grades/course/" + id + "/exists";
+
         try {
-            Boolean hasGrades = restTemplate.getForObject("http://localhost:8083/grades/course/" + id + "/exists", Boolean.class);
+            Map<String, Boolean> response = restTemplate.getForObject(url, Map.class);
+
+            Boolean hasGrades = (response != null) && Boolean.TRUE.equals(response.get("exists"));
 
             if (hasGrades != null && hasGrades) {
                 throw new CourseHasGradesException();

@@ -7,6 +7,7 @@ import com.example.SpringBootApp.exception.StudentNotFoundException;
 import com.example.SpringBootApp.model.Grade;
 import com.example.SpringBootApp.repository.GradeRepository;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
@@ -21,6 +22,12 @@ public class GradeServiceImpl implements GradeService {
     private final GradeRepository gradeRepository;
 
     private final RestTemplate restTemplate = new RestTemplate();
+
+    @Value("${grade.student.service.url}")
+    private String studentServiceUrl;
+
+    @Value("${grade.course.service.url}")
+    private String courseServiceUrl;
 
     public GradeServiceImpl(GradeRepository gradeRepository) {
         this.gradeRepository = gradeRepository;
@@ -48,13 +55,13 @@ public class GradeServiceImpl implements GradeService {
         validateGradeValue(grade.getGrade());
 
         try {
-            restTemplate.getForObject("http://localhost:8081/students/" + grade.getStudentId(), Object.class);
+            restTemplate.getForObject(studentServiceUrl + grade.getStudentId(), Object.class);
         } catch (HttpStatusCodeException e) {
             throw new StudentNotFoundException();
         }
 
         try {
-            restTemplate.getForObject("http://localhost:8082/courses/" + grade.getCourseId(), Object.class);
+            restTemplate.getForObject(courseServiceUrl + grade.getCourseId(), Object.class);
         } catch (HttpStatusCodeException e) {
             throw new CourseNotFoundException();
         }

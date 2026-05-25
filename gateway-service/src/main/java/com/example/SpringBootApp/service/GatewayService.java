@@ -5,6 +5,7 @@ import com.example.SpringBootApp.model.dto.CourseDTO;
 import com.example.SpringBootApp.model.dto.GradeDTO;
 import com.example.SpringBootApp.model.dto.GradeDetailsDTO;
 import com.example.SpringBootApp.model.dto.StudentDTO;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
@@ -21,9 +22,14 @@ public class GatewayService {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    private final String STUDENT_URL = "http://localhost:8081/students/";
-    private final String COURSE_URL = "http://localhost:8082/courses/";
-    private final String GRADE_URL = "http://localhost:8083/grades/";
+    @Value("${gateway.student.url}")
+    private String STUDENT_URL;
+
+    @Value("${gateway.course.url}")
+    private String COURSE_URL;
+
+    @Value("${gateway.grade.url}")
+    private String GRADE_URL;
 
     private void studentExists(Integer studentId) {
         try {

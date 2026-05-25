@@ -1,0 +1,47 @@
+services:
+  student-service:
+    build: ./student-service
+    ports:
+      - "8081:8081"
+    networks:
+      - lab-network
+
+  course-service:
+    build: ./course-service
+    ports:
+      - "8082:8082"
+    networks:
+      - lab-network
+
+  grade-service:
+    build: ./grade-service
+    ports:
+      - "8083:8083"
+    networks:
+      - lab-network
+
+  gateway-service:
+    build: ./gateway-service
+    ports:
+      - "8080:8080"
+    environment:
+      - GATEWAY_STUDENT_URL=http://student-service:8081/students/
+      - GATEWAY_COURSE_URL=http://course-service:8082/courses/
+      - GATEWAY_GRADE_URL=http://grade-service:8083/grades/
+    networks:
+      - lab-network
+
+  thick-client:
+    build: ./thick-client
+    stdin_open: true
+    tty: true
+    environment:
+      - THICK_CLIENT_STUDENT_SERVICE_URL=http://student-service:8081
+      - THICK_CLIENT_COURSE_SERVICE_URL=http://course-service:8082
+      - THICK_CLIENT_GRADE_SERVICE_URL=http://grade-service:8083
+    networks:
+      - lab-network
+
+networks:
+  lab-network:
+    driver: bridge

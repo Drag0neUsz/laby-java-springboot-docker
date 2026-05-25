@@ -3,6 +3,7 @@ package com.example.SpringBootApp.service;
 import com.example.SpringBootApp.exception.*;
 import com.example.SpringBootApp.model.Student;
 import com.example.SpringBootApp.repository.StudentRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -14,6 +15,9 @@ public class StudentServiceImpl implements StudentService {
     private final StudentRepository studentRepository;
 
     private final RestTemplate restTemplate = new RestTemplate();
+
+    @Value("${student.grade.service.url}")
+    private String gradeServiceUrl;
 
     public StudentServiceImpl(StudentRepository studentRepository) {
         this.studentRepository = studentRepository;
@@ -49,7 +53,7 @@ public class StudentServiceImpl implements StudentService {
         }
 
         try {
-            restTemplate.delete("http://localhost:8083/grades/student/" + id);
+            restTemplate.delete(gradeServiceUrl + id);
         } catch (Exception e) {
             throw new RuntimeException("Błąd podczas komunikacji z serwisem ocen przy usuwaniu studenta.");
         }
